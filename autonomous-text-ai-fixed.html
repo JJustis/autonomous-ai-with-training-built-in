@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>?? Advanced Autonomous Text Learning AI</title>
+    
+    <!-- TensorFlow.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.7.0/dist/tf.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Arial', monospace;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #2c2c2c;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        #textInput {
+            width: 100%;
+            min-height: 200px;
+            background-color: #3c3c3c;
+            color: #e0e0e0;
+            border: 1px solid #4c4c4c;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .btn {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .btn:disabled {
+            background-color: #888;
+            cursor: not-allowed;
+        }
+
+        #learningLog, #generatedOutput {
+            background-color: #1c1c1c;
+            color: #0f0;
+            padding: 10px;
+            margin-top: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .stat-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .stat-box {
+            background-color: #3c3c3c;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .error-log {
+            color: #ff4444;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1> Advanced Autonomous Text Learning AI</h1>
+        
+        <textarea id="textInput" placeholder="Paste text blocks for AI training..."></textarea>
+        
+        <div>
+            <button id="ingestBtn" class="btn" onclick="autonomousAI.ingestText()">Ingest Text</button>
+            <button id="trainBtn" class="btn" onclick="autonomousAI.trainModel()" disabled>Train Model</button>
+            <button id="generateBtn" class="btn" onclick="autonomousAI.generateText()" disabled>Generate Text</button>
+        </div>
+
+        <div class="stat-container">
+            <div class="stat-box">
+                <h3>Vocabulary Size</h3>
+                <div id="vocabularySize">0</div>
+            </div>
+            <div class="stat-box">
+                <h3>Training Iterations</h3>
+                <div id="trainingIterations">0</div>
+            </div>
+            <div class="stat-box">
+                <h3>Model Complexity</h3>
+                <div id="modelComplexity">0</div>
+            </div>
+        </div>
+
+        <div id="learningLog">
+            <h3>Learning Log</h3>
+        </div>
+
+        <div id="generatedOutput">
+            <h3>Generated Text</h3>
+        </div>
+    </div>
+
+    <script>
+class AutonomousTextAI {
+    constructor() {
+        // Core learning components
+        this.vocabulary = new Set();
+        this.tokenToIndex = {};
+        this.indexToToken = {};
+        
+        // Text processing
+        this.trainingTexts = [];
+        this.trainingIterations = 0;
+        
+        // TensorFlow model components
+        this.model = null;
+        this.sequenceLength = 20;  // Increased for more context
+        
+        // UI elements
+        this.textInput = document.getElementById('textInput');
+        this.learningLog = document.getElementById('learningLog');
+        this.generatedOutput = document.getElementById('generatedOutput');
+        this.vocabularySizeEl = document.getElementById('vocabularySize');
+        this.trainingIterationsEl = document.getElementById('trainingIterations');
+        this.modelComplexityEl = document.getElementById('modelComplexity');
+        
+        // Button elements
+        this.ingestBtn = document.getElementById('ingestBtn');
+        this.trainBtn = document.getElementById('trainBtn');
+        this.generateBtn = document.getElementById('generateBtn');
+    }
+
+    // Enhanced text preprocessing with more sophisticated cleaning
+    preprocessText(text) {
+        // More comprehensive preprocessing
+        return text
+            .toLowerCase()
+            .replace(/[^\w\s.,!?'-]/g, '')  // Keep punctuation
+            .split(/\s+/)
+            .filter(token => token.length > 0 && token.length <= 30);  // Limit token length
+    }
+
+    buildVocabulary(tokens) {
+        // Add tokens to vocabulary with frequency tracking
+        const tokenFrequency = {};
+        tokens.forEach(token => {
+            this.vocabulary.add(token);
+            tokenFrequency[token] = (tokenFrequency[token] || 0) + 1;
+        });
+        
+        // Sort tokens by frequency for better indexing
+        const sortedTokens = Object.keys(tokenFrequency)
+            .sort((a, b) => tokenFrequency[b] - tokenFrequency[a]);
+        
+        // Create mappings
+        this.tokenToIndex = {};
+        this.indexToToken = {};
+        
+        sortedTokens.forEach((token, index) => {
+            this.tokenToIndex[token] = index;
+            this.indexToToken[index] = token;
+        });
+
+        // Update UI and enable train button
+        this.vocabularySizeEl.textContent = this.vocabulary.size;
+        this.trainBtn.disabled = false;
+    }
+
+    ingestText() {
+        const text = this.textInput.value;
+        if (!text) {
+            this.logError('Please enter text to ingest');
+            return;
+        }
+
+        try {
+            const tokens = this.preprocessText(text);
+            
+            if (tokens.length < this.sequenceLength) {
+                this.logError('Text is too short for meaningful training');
+                return;
+            }
+            
+            // Add to training texts
+            this.trainingTexts.push(tokens);
+            
+            // Update vocabulary
+            this.buildVocabulary([...this.vocabulary, ...tokens]);
+            
+            // Log ingestion
+            this.log(`Ingested text block: ${tokens.length} tokens`);
+            
+            // Clear input and enable generate button if multiple texts ingested
+            if (this.trainingTexts.length > 1) {
+                this.textInput.value = '';
+            }
+        } catch (error) {
+            this.logError(`Text ingestion failed: ${error.message}`);
+        }
+    }
+
+    createModel() {
+        // More sophisticated model architecture
+        const model = tf.sequential();
+
+        // Embedding layer with increased dimensionality
+        model.add(tf.layers.embedding({
+            inputDim: this.vocabulary.size,
+            outputDim: 64,  // Increased embedding dimensions
+            inputLength: this.sequenceLength
+        }));
+
+        // Add LSTM layer for better sequence learning
+        model.add(tf.layers.lstm({
+            units: 128,
+            returnSequences: false
+        }));
+
+        // Dense layers with regularization
+        model.add(tf.layers.dense({
+            units: 256,
+            activation: 'relu',
+            kernelRegularizer: tf.regularizers.l2({ l2: 0.001 })
+        }));
+
+        model.add(tf.layers.dropout({ rate: 0.3 }));
+
+        model.add(tf.layers.dense({
+            units: this.vocabulary.size,
+            activation: 'softmax'
+        }));
+
+        // Advanced optimizer with learning rate decay
+        const learningRate = 0.001;
+        const decay = learningRate / 10;
+        const optimizer = tf.train.adam(learningRate, decay);
+
+        // Compile model
+        model.compile({
+            optimizer: optimizer,
+            loss: 'categoricalCrossentropy',
+            metrics: ['accuracy']
+        });
+
+        return model;
+    }
+
+    prepareTrainingData() {
+        const xs = [];
+        const ys = [];
+
+        // Validate training data
+        if (this.trainingTexts.length === 0) {
+            throw new Error('No training data available');
+        }
+
+        this.trainingTexts.forEach(tokens => {
+            // Ensure we have enough tokens
+            if (tokens.length < this.sequenceLength + 1) return;
+
+            for (let i = 0; i <= tokens.length - this.sequenceLength - 1; i++) {
+                // Input sequence
+                const inputSequence = tokens.slice(i, i + this.sequenceLength)
+                    .map(token => this.tokenToIndex[token] || 0);
+
+                // Next token (target)
+                const nextToken = tokens[i + this.sequenceLength];
+                const nextTokenIndex = this.tokenToIndex[nextToken] || 0;
+
+                xs.push(inputSequence);
+                
+                // One-hot encode the next token
+                const oneHotNextToken = new Array(this.vocabulary.size).fill(0);
+                oneHotNextToken[nextTokenIndex] = 1;
+                ys.push(oneHotNextToken);
+            }
+        });
+
+        // Validate training data
+        if (xs.length === 0 || ys.length === 0) {
+            throw new Error('Insufficient training data');
+        }
+
+        // Create tensors with explicit shape
+        const xsTensor = tf.tensor2d(xs, [xs.length, this.sequenceLength]);
+        const ysTensor = tf.tensor2d(ys, [ys.length, this.vocabulary.size]);
+
+        return { xs: xsTensor, ys: ysTensor };
+    }
+
+    async trainModel() {
+        try {
+            if (this.trainingTexts.length === 0) {
+                this.logError('Please ingest some text first');
+                return;
+            }
+
+            // Disable buttons during training
+            this.trainBtn.disabled = true;
+            this.generateBtn.disabled = true;
+
+            // Create or recreate model
+            this.model = this.createModel();
+
+            // Prepare training data
+            const { xs, ys } = this.prepareTrainingData();
+
+            // Enhanced training parameters
+            const epochs = 10;
+            const batchSize = Math.min(64, Math.floor(xs.shape[0] / 2));
+
+            // Train the model with early stopping and validation split
+            const history = await this.model.fit(xs, ys, {
+                epochs: epochs,
+                batchSize: batchSize,
+                validationSplit: 0.2,
+                callbacks: {
+                    onEpochEnd: (epoch, logs) => {
+                        this.log(`Epoch ${epoch + 1}: 
+                            loss = ${logs.loss.toFixed(4)}, 
+                            accuracy = ${(logs.acc * 100).toFixed(2)}%, 
+                            val_loss = ${logs.val_loss.toFixed(4)}`);
+                        this.trainingIterations++;
+                        this.trainingIterationsEl.textContent = this.trainingIterations;
+                    }
+                }
+            });
+
+            // Update model complexity visualization
+            this.modelComplexityEl.textContent = this.calculateModelComplexity();
+
+            this.log('Model training completed successfully');
+            
+            // Enable generate button
+            this.generateBtn.disabled = false;
+        } catch (error) {
+            console.error('Training error:', error);
+            this.logError(`Training failed: ${error.message}`);
+        } finally {
+            // Re-enable train button
+            this.trainBtn.disabled = false;
+        }
+    }
+
+    calculateModelComplexity() {
+        // More sophisticated complexity estimation
+        const vocabMultiplier = Math.log(this.vocabulary.size + 1);
+        const iterationMultiplier = Math.sqrt(this.trainingIterations);
+        return Math.floor(vocabMultiplier * iterationMultiplier * 100);
+    }
+
+    generateText(temperature = 0.7, length = 100) {
+        if (!this.model) {
+            this.logError('Please train the model first');
+            return;
+        }
+
+        try {
+            // Start with a random sequence from training data
+            const startSequence = this.getRandomStartSequence();
+            const generatedTokens = [...startSequence];
+
+            // Generate subsequent tokens
+            for (let i = 0; i < length; i++) {
+                // Ensure input is the right shape
+                const inputSequence = startSequence
+                    .slice(-this.sequenceLength)
+                    .map(token => this.tokenToIndex[token] || 0);
+
+                // Pad or truncate to exact sequence length
+                const paddedSequence = inputSequence.length === this.sequenceLength 
+                    ? inputSequence 
+                    : inputSequence.concat(Array(this.sequenceLength - inputSequence.length).fill(0));
+
+                // Create input tensor
+                const input = tf.tensor2d([paddedSequence], [1, this.sequenceLength]);
+                
+                // Predict next token
+                const prediction = this.model.predict(input);
+                const probabilities = prediction.dataSync();
+                
+                // Apply temperature to probabilities
+                const adjustedProbabilities = this.applyTemperature(probabilities, temperature);
+                
+                // Sample next token
+                const nextTokenIndex = this.sampleFromProbabilities(adjustedProbabilities);
+                const nextToken = this.indexToToken[nextTokenIndex];
+
+                generatedTokens.push(nextToken);
+                startSequence.push(nextToken);
+            }
+
+            // Display generated text
+            const generatedText = generatedTokens.join(' ');
+            this.generatedOutput.textContent = generatedText;
+            this.log('Generated new text successfully');
+        } catch (error) {
+            console.error('Generation error:', error);
+            this.logError(`Text generation failed: ${error.message}`);
+        }
+    }
+
+    getRandomStartSequence() {
+        // More robust random start sequence selection
+        const randomText = this.trainingTexts[Math.floor(Math.random() * this.trainingTexts.length)];
+        const startIndex = Math.max(0, Math.floor(Math.random() * (randomText.length - this.sequenceLength)));
+        return randomText.slice(startIndex, startIndex + this.sequenceLength);
+    }
+
+    sampleFromProbabilities(probabilities) {
+        const r = Math.random();
+        let accumulatedProb = 0;
+        
+        for (let i = 0; i < probabilities.length; i++) {
+            accumulatedProb += probabilities[i];
+            if (r <= accumulatedProb) return i;
+        }
+        
+        return probabilities.length - 1;
+    }
+
+    // New method to apply temperature to probabilities
+    applyTemperature(probabilities, temperature) {
+        const adjustedProbs = probabilities.map(p => Math.pow(p, 1 / temperature));
+        const sum = adjustedProbs.reduce((a, b) => a + b, 0);
+        return adjustedProbs.map(p => p / sum);
+    }
+
+    log(message) {
+        const logEntry = document.createElement('div');
+        logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        this.learningLog.prepend(logEntry);
+    }
+
+    logError(message) {
+        const errorEntry = document.createElement('div');
+        errorEntry.textContent = `[${new Date().toLocaleTimeString()}] ?? ${message}`;
+        errorEntry.classList.add('error-log');
+        this.learningLog.prepend(errorEntry);
+    }
+
+    // Reset method for clearing all training data
+    resetTraining() {
+        this.vocabulary.clear();
+        this.tokenToIndex = {};
+        this.indexToToken = {};
+        this.trainingTexts = [];
+        this.trainingIterations = 0;
+        this.model = null;
+
+        // Reset UI elements
+        this.vocabularySizeEl.textContent = '0';
+        this.trainingIterationsEl.textContent = '0';
+        this.modelComplexityEl.textContent = '0';
+        this.learningLog.innerHTML = '<h3>Learning Log</h3>';
+        this.generatedOutput.textContent = '';
+        this.textInput.value = '';
+
+        // Disable buttons
+        this.trainBtn.disabled = true;
+        this.generateBtn.disabled = true;
+
+        this.log('Training session reset completely');
+    }
+
+    // Export current model and training state
+    exportModelState() {
+        if (!this.model) {
+            this.logError('No model to export');
+            return null;
+        }
+
+        return {
+            vocabulary: Array.from(this.vocabulary),
+            tokenToIndex: this.tokenToIndex,
+            trainingTexts: this.trainingTexts,
+            trainingIterations: this.trainingIterations,
+            modelWeights: this.model.toJSON()
+        };
+    }
+
+    // Import previously saved model state
+    async importModelState(savedState) {
+        try {
+            // Restore vocabulary
+            this.vocabulary = new Set(savedState.vocabulary);
+            this.tokenToIndex = savedState.tokenToIndex;
+            
+            // Recreate index to token mapping
+            this.indexToToken = {};
+            Object.entries(this.tokenToIndex).forEach(([token, index]) => {
+                this.indexToToken[index] = token;
+            });
+
+            // Restore training texts and iterations
+            this.trainingTexts = savedState.trainingTexts;
+            this.trainingIterations = savedState.trainingIterations;
+
+            // Recreate and load model weights
+            this.model = this.createModel();
+            await this.model.loadWeights(savedState.modelWeights);
+
+            // Update UI
+            this.vocabularySizeEl.textContent = this.vocabulary.size;
+            this.trainingIterationsEl.textContent = this.trainingIterations;
+            this.modelComplexityEl.textContent = this.calculateModelComplexity();
+
+            // Enable buttons
+            this.trainBtn.disabled = false;
+            this.generateBtn.disabled = false;
+
+            this.log('Model state successfully imported');
+        } catch (error) {
+            this.logError(`Model import failed: ${error.message}`);
+        }
+    }
+}
+
+// Extend window object with additional methods
+window.autonomousAI = new AutonomousTextAI();
+
+// Add reset and export/import buttons to the UI
+document.addEventListener('DOMContentLoaded', () => {
+    const buttonContainer = document.querySelector('.container div:first-of-type');
+    
+    // Reset Button
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = 'Reset Training';
+    resetBtn.classList.add('btn');
+    resetBtn.onclick = () => window.autonomousAI.resetTraining();
+    buttonContainer.appendChild(resetBtn);
+
+    // Export Button
+    const exportBtn = document.createElement('button');
+    exportBtn.textContent = 'Export Model';
+    exportBtn.classList.add('btn');
+    exportBtn.onclick = () => {
+        const modelState = window.autonomousAI.exportModelState();
+        if (modelState) {
+            const blob = new Blob([JSON.stringify(modelState)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ai_model_state_${new Date().toISOString().replace(/:/g, '-')}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    };
+    buttonContainer.appendChild(exportBtn);
+
+    // Import Button
+    const importBtn = document.createElement('button');
+    importBtn.textContent = 'Import Model';
+    importBtn.classList.add('btn');
+    importBtn.onclick = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                try {
+                    const text = await file.text();
+                    const modelState = JSON.parse(text);
+                    await window.autonomousAI.importModelState(modelState);
+                } catch (error) {
+                    window.autonomousAI.logError(`Model import failed: ${error.message}`);
+                }
+            }
+        };
+        input.click();
+    };
+    buttonContainer.appendChild(importBtn);
+});
+</script>
+</body>
+</html>
